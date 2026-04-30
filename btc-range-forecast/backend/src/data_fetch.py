@@ -2,7 +2,8 @@ import pandas as pd
 import requests
 
 
-BINANCE_KLINES_URL = "https://data-api.binance.vision/api/v3/klines"
+BINANCE_KLINES_URL = "https://api.binance.com/api/v3/klines"
+BINANCE_TICKER_URL = "https://api.binance.com/api/v3/ticker/price"
 
 # Binance kline response column indices
 _OPEN_TIME = 0
@@ -65,12 +66,12 @@ def fetch_btc_data(
     df = df.iloc[:-1].reset_index(drop=True)
 
     # ── 6. Validate ─────────────────────────────────────────────────
-    _validate(df, expected_rows=limit - 1)
+    _validate(df, expected_rows=limit - 1, interval=interval)
 
     return df
 
 
-def _validate(df: pd.DataFrame, expected_rows: int) -> None:
+def _validate(df: pd.DataFrame, expected_rows: int, interval: str) -> None:
     """Run sanity checks on the cleaned DataFrame."""
 
     # Row count
@@ -90,12 +91,27 @@ def _validate(df: pd.DataFrame, expected_rows: int) -> None:
     if not pd.api.types.is_datetime64_any_dtype(df["open_time"]):
         raise TypeError("Column 'open_time' is not datetime")
 
-    # Time continuity – every gap should be exactly 1 hour
+    # Time continuity – calculate expected gap based on interval
     diffs = df["open_time"].diff().dropna()
-    expected_delta = pd.Timedelta(hours=1)
+    
+    if interval.endswith('m'):
+        expected_delta = pd.Timedelta(minutes=int(interval[:-1]))
+    elif interval.endswith('h'):
+        expected_delta = pd.Timedelta(hours=int(interval[:-1]))
+    elif interval.endswith('d'):
+        expected_delta = pd.Timedelta(days=int(interval[:-1]))
+    else:
+        expected_delta = pd.Timedelta(hours=1) # Default
+
     bad = diffs[diffs != expected_delta]
     if not bad.empty:
         raise ValueError(
-            f"Found {len(bad)} non-1-hour gap(s) in open_time "
+            f"Found {len(bad)} non-{interval} gap(s) in open_time "
             f"starting at index {bad.index[0]}"
         )
+
+def fetch_current_price(symbol: str = "BTCUSDT") -> float:
+    """Fetch the absolute latest price for a symbol using the lightweight ticker endpoint."""
+    resp = requests.get(BINANCE_TICKER_URL, params={"symbol": symbol}, timeout=5)
+    resp.raise_for_status()
+    return float(resp.json()["price"])

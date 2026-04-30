@@ -2,13 +2,6 @@ import numpy as np
 import pandas as pd
 
 
-def rolling_entropy(x, window=60, bins=20):
-    """Calculate rolling entropy over a Series."""
-    def ent(v):
-        p, _ = np.histogram(v, bins=bins, density=True)
-        p = p[p > 0]
-        return -np.sum(p * np.log(p))
-    return x.rolling(window).apply(ent, raw=True)
 
 
 def prepare_features(df: pd.DataFrame) -> pd.DataFrame:
