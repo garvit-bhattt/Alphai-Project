@@ -107,6 +107,9 @@ npm run dev
 ```text
 btc-range-forecast/
 ├── backend/
+│   ├── analysis/              # Backtesting and evaluation scripts
+│   │   ├── backtest.py
+│   │   └── evaluate.py
 │   ├── src/
 │   │   ├── data_fetch.py      # Binance API integrations
 │   │   ├── preprocess.py      # Feature engineering
