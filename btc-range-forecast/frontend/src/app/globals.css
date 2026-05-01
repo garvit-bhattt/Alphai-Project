@@ -33,26 +33,42 @@ body {
   }
 }
 
-/* Custom Scrollbar */
+/* Global Scrollbar */
 ::-webkit-scrollbar {
   width: 6px;
+  height: 6px;
 }
-
 ::-webkit-scrollbar-track {
   background: transparent;
 }
-
 ::-webkit-scrollbar-thumb {
   background: #2a3441;
   border-radius: 6px;
 }
-
 ::-webkit-scrollbar-thumb:hover {
   background: #3b4a5a;
 }
-
-/* For Firefox */
 * {
   scrollbar-width: thin;
   scrollbar-color: #2a3441 transparent;
+}
+
+/* Specific Custom Scrollbar Class for UI Polish */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 4px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+  margin-block: 4px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.1) transparent;
 }

@@ -26,6 +26,11 @@ export default function PredictionHistory({ history }: PredictionHistoryProps) {
 
   return (
     <div className="card h-full min-h-0 flex flex-col bg-[#0F1720] border border-[#1C2530] rounded-xl p-0 overflow-hidden relative">
+      <div className="px-5 pt-4 pb-3 border-b border-[#1C2530] shrink-0 bg-[#0F1720] z-30">
+        <h3 className="text-[10px] font-black uppercase text-white/90 tracking-widest">Prediction Timeline</h3>
+        <p className="text-[8px] text-gray-500 uppercase font-bold tracking-tighter mt-0.5">Resolved Audit Log</p>
+      </div>
+      
       {/* Scrollable Table Area */}
       <div className="flex-1 overflow-y-auto overflow-x-hidden relative min-h-0 custom-scrollbar pr-1">
         <table className="w-full text-left border-collapse">

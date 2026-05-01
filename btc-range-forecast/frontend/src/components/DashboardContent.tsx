@@ -162,11 +162,11 @@ export default function DashboardContent({
 
       {/* Metrics Row */}
       <div className="grid grid-cols-5 gap-4 shrink-0">
-        <MetricsCard label="Current Price" value={`$${formatP(prediction.current_price)}`} subValue="Live BTCUSDT" subValueColor="green" />
-        <MetricsCard label="Forecast Range (1H)" value={`$${formatP(prediction.lower)} - $${formatP(prediction.upper)}`} subValue={`${prediction.confidence * 100}% Confidence`} />
-        <MetricsCard label="Coverage (30D)" value={`${(metrics.coverage * 100).toFixed(2)}%`} progress={metrics.coverage * 100} progressTarget="Target: 95%" />
-        <MetricsCard label="Avg Range Width" value={`$${formatP(metrics.avg_width)}`} subValue="Lower = Higher Precision" />
-        <MetricsCard label="Winkler Score" value={formatP(metrics.winkler)} subValue="Efficiency Metric" />
+        <MetricsCard variant="current-price" label="Current Price" value={`$${formatP(prediction.current_price)}`} subValue="Live BTCUSDT" />
+        <MetricsCard variant="forecast-range" label="Forecast Range (1H)" value={`$${formatP(prediction.lower)} - $${formatP(prediction.upper)}`} subValue="95% Confidence" />
+        <MetricsCard variant="coverage" label="Coverage (30D)" value={`${(metrics.coverage * 100).toFixed(2)}%`} progress={metrics.coverage * 100} progressTarget="95%" />
+        <MetricsCard variant="avg-range" label="Avg Range Width" value={`$${formatP(metrics.avg_width)}`} subValue="Lower = Higher Precision" />
+        <MetricsCard variant="winkler" label="Winkler Score" value={formatP(metrics.winkler)} subValue="Efficiency Metric" />
       </div>
 
       {/* Main Content Area (PROPORTIONAL FLEX) */}
@@ -190,6 +190,7 @@ export default function DashboardContent({
             prediction={prediction}
             currentPrice={prediction.current_price}
             insights={insights}
+            history={history}
           />
         </div>
       </div>
