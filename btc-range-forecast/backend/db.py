@@ -44,7 +44,7 @@ def get_db_history(limit=100):
 def get_resolved_db_history(limit=50):
     """Fetch only resolved predictions (actual IS NOT NULL) for the audit log."""
     res = supabase.table("predictions") \
-        .select("created_at, lower, upper, actual, hit") \
+        .select("created_at, candle_time, lower, upper, actual, hit") \
         .not_.is_("actual", "null") \
         .order("created_at", desc=True) \
         .limit(limit) \

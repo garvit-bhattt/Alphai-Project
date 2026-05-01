@@ -50,7 +50,7 @@ export default function PredictionHistory({ history }: PredictionHistoryProps) {
                 <tr key={i} className="hover:bg-white/[0.02] transition-colors group">
                   <td className="py-1.5 px-5 whitespace-nowrap">
                     <span className="text-[10px] font-bold text-white tracking-wide tabular-nums">
-                      {formatTimeUTC(item.created_at)}
+                      {formatTimeUTC(item.candle_time || item.created_at)}
                     </span>
                   </td>
                   <td className="py-1.5 px-2 whitespace-nowrap">

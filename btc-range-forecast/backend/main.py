@@ -44,7 +44,8 @@ def run_prediction_job():
         # 5. Extract metadata
         last_row = df_recent.iloc[-1]
         current_price = float(last_row["close"])
-        candle_time = last_row["open_time"]
+        import pandas as pd
+        candle_time = last_row["open_time"] + pd.Timedelta(hours=1)
         
         # 6. Database Persistence
         # Resolve past entries
