@@ -48,7 +48,7 @@ def run_prediction_job():
         
         # 6. Database Persistence
         # Resolve past entries
-        resolve_db_predictions(current_price)
+        resolve_db_predictions(full_df)
         
         # Format timestamps
         if hasattr(candle_time, 'to_pydatetime'):
@@ -131,8 +131,12 @@ def predict():
                  raise HTTPException(status_code=404, detail="No predictions available yet.")
         
         latest_entry = history[0]
+        
+        # Get live price to keep prediction payload fresh for the UI
+        live_price = fetch_current_price()
+        
         return {
-            "current_price": latest_entry.get("current_price", 0),
+            "current_price": live_price,
             "lower": latest_entry.get("lower", 0),
             "upper": latest_entry.get("upper", 0),
             "confidence": 0.95,

@@ -52,17 +52,26 @@ def get_resolved_db_history(limit=50):
     return res.data
 
 
-def resolve_db_predictions(latest_price):
-    """Resolve any pending predictions where actual is NULL."""
+def resolve_db_predictions(historical_df):
+    """Resolve any pending predictions against their actual target candle close prices."""
     # 1. Fetch pending
     pending = supabase.table("predictions") \
         .select("*") \
         .is_("actual", "null") \
         .execute()
     
+    import pandas as pd
     for entry in pending.data:
-        hit = entry["lower"] <= latest_price <= entry["upper"]
-        supabase.table("predictions").update({
-            "actual": round(latest_price, 2),
-            "hit": hit
-        }).eq("id", entry["id"]).execute()
+        target_time_str = entry["candle_time"]
+        target_dt = pd.to_datetime(target_time_str)
+        if target_dt.tzinfo is not None:
+            target_dt = target_dt.tz_localize(None)
+            
+        matching_row = historical_df[historical_df['open_time'] == target_dt]
+        if not matching_row.empty:
+            actual_price = float(matching_row.iloc[0]["close"])
+            hit = entry["lower"] <= actual_price <= entry["upper"]
+            supabase.table("predictions").update({
+                "actual": round(actual_price, 2),
+                "hit": hit
+            }).eq("id", entry["id"]).execute()
