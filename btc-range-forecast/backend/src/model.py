@@ -3,6 +3,10 @@ import pandas as pd
 from scipy import stats
 from arch import arch_model
 import time
+import warnings
+
+# Suppress arch warnings in production
+warnings.filterwarnings("ignore", category=UserWarning, module="arch")
 
 # --- 1. Global Cache for FIGARCH ---
 _FIGARCH_CACHE = {
@@ -24,9 +28,13 @@ def get_figarch_vol(returns_scaled: pd.Series):
         
         # Fit model
         am = arch_model(returns_scaled, vol='FIGARCH', p=1, o=0, q=1, dist='studentst')
-        res = am.fit(disp="off")
-        _FIGARCH_CACHE["res"] = res
-        _FIGARCH_CACHE["last_fit_time"] = current_time
+        try:
+            res = am.fit(disp="off", show_warning=False)
+            _FIGARCH_CACHE["res"] = res
+            _FIGARCH_CACHE["last_fit_time"] = current_time
+        except Exception:
+            if _FIGARCH_CACHE["res"] is None:
+                raise
     
     res = _FIGARCH_CACHE["res"]
     return res.conditional_volatility / 100, res.params
@@ -39,74 +47,30 @@ def rolling_entropy(x, window=60, bins=20):
         return -np.sum(p * np.log(p))
     return x.rolling(window).apply(ent, raw=True)
 
-def update_params(p, sigma2, bar_sigma2, t):
-    """Update Cyber-GBM parameters dynamically."""
-    err = sigma2 - bar_sigma2
-    lr  = p['eta'] / (1 + t**0.55)
-    p['gamma'] = np.clip(p['gamma'] + lr * err, 0.01, 0.5)
-    return p
-
-def simulate_cyber_gbm(S0, mu, sigma_fig, H, M, params, bar_sigma2, nu, n_steps, dt=1, eps=1e-6):
-    """Simulate a single path using Cyber GBM."""
-    S = np.zeros(n_steps + 1)
-    S[0] = S0
+def simulate_mc_one_step(S0, mu, sigma_last, sigma_bar, H_val, M_val,
+                         redundancy_val, info_filter_val, params, nu, n_sims):
+    """Vectorised single-step MC: returns array of S_{t+1} of length n_sims."""
+    sigma2 = sigma_last ** 2
+    crisis  = (H_val > 0.8) or (M_val > 0.8)
+    delta_t = params['delta'] if crisis else 0.0
     
-    # Initial sigma2 from the last known FIGARCH volatility
-    sigma2 = float(sigma_fig.iloc[-1]) ** 2
+    sigma2 = (sigma_last**2 * (1 + params['alpha'] * H_val + delta_t * M_val)
+              + params['gamma'] * (sigma_bar - sigma2))
+              
+    sigma2 *= max(1e-12, redundancy_val)
+    sigma2 *= 1 + 0.5 * info_filter_val
+    sigma2 = float(np.clip(sigma2, 1e-12, 0.5))
     
-    H_max = float(H.max()) if H.max() > 0 else 1.0
-    M_max = float(M.max()) if M.max() > 0 else 1.0
-    
-    for t in range(1, n_steps + 1):
-        # Fix: Time indexing relative to end
-        idx = -t
-        
-        H_val = min(float(H.iloc[idx]) / H_max, 1.0)
-        M_val = min(float(M.iloc[idx]) / M_max, 1.0)
-        
-        crisis  = (H_val > 0.8) or (M_val > 0.8)
-        delta_t = params['delta'] if crisis else 0.0
-        
-        # Volatility evolution
-        sigma2 = (
-            float(sigma_fig.iloc[idx])**2 * (1 + params['alpha'] * H_val + delta_t * M_val)
-            + params['gamma'] * (bar_sigma2 - sigma2)
-        )
-        
-        # Fix: Clamp volatility
-        sigma2 = np.clip(sigma2, 1e-6, 0.1)
-        
-        # Random shock (Student-t)
-        Z   = np.random.standard_t(nu) * np.sqrt((nu - 2) / nu)
-        
-        # Price update
-        S[t]= S[t-1] * np.exp((mu - 0.5 * sigma2) * dt + np.sqrt(sigma2 * dt) * Z)
-        
-        # Parameter update
-        params = update_params(params, sigma2, bar_sigma2, t)
-        
-    return S
-
-def simulate_mc(S0, mu, sigma_fig, H, M, bar_sigma2, nu, base_params, n_sims=5000, n_days=1):
-    """Run Monte Carlo simulation over multiple paths."""
-    out = np.zeros((n_sims, n_days + 1))
-    for i in range(n_sims):
-        # Fix: Reset params per simulation
-        path = simulate_cyber_gbm(
-            S0, mu, sigma_fig, H, M,
-            base_params.copy(),
-            bar_sigma2, nu, n_days
-        )
-        out[i] = path
-    return out
+    Z   = np.random.standard_t(nu, size=n_sims) * np.sqrt((nu - 2) / nu)
+    return S0 * np.exp((mu - 0.5 * sigma2) + np.sqrt(sigma2) * Z)
 
 def predict_next_range(
     df: pd.DataFrame,
-    n_sims: int = 5000,
+    n_sims: int = 10000,
     seed: int = 42
 ) -> dict:
     """
-    Generate a 95% price range prediction using Cyber-GBM.
+    Generate a 95% price range prediction using vectorised Cyber-GBM.
     """
     np.random.seed(seed)
     
@@ -114,37 +78,56 @@ def predict_next_range(
     S0 = float(df["close"].iloc[-1])
     returns = df["log_return"]
     
+    # Needs at least 100 rows for stable modeling
+    if len(returns.dropna()) < 100:
+        return {"lower": round(S0 * 0.99, 2), "upper": round(S0 * 1.01, 2)}
+    
     # 2. FIGARCH Volatility (Cached)
-    sigma_fig, arch_params = get_figarch_vol(returns * 100)
+    sigma_fig, arch_params = get_figarch_vol(returns.dropna() * 100)
     
     # 3. Residuals and Student-t degrees of freedom
-    mu_arch = arch_params.get('mu', returns.mean() * 100) / 100
+    mu_arch = float(arch_params.get('mu', returns.mean() * 100)) / 100
     residuals = (returns - mu_arch) / sigma_fig
     
     try:
         # Fit nu to residuals
-        nu = max(4.0, stats.t.fit(residuals.dropna(), floc=0, fscale=1)[0])
+        nu = max(4.0, float(stats.t.fit(residuals.dropna(), floc=0, fscale=1)[0]))
     except:
-        nu = 4.0
+        nu = 5.0
         
-    # 4. Entropy and Magnitude (Precomputed once per request)
-    H_series = rolling_entropy(residuals)
-    M_series = returns.abs().rolling(60).mean()
-    bar_sigma2 = float((sigma_fig**2).mean())
+    # 4. Entropy and Magnitude
+    H_series = rolling_entropy(residuals, window=60).dropna()
+    M_series = returns.abs().rolling(60).mean().dropna()
     
-    # Drop NaNs for safety in max calculations
-    H_clean = H_series.dropna()
-    M_clean = M_series.dropna()
+    if len(H_series) == 0 or len(M_series) == 0:
+        return {"lower": round(S0 * 0.99, 2), "upper": round(S0 * 1.01, 2)}
+        
+    H_max = max(H_series.max(), 1e-9)
+    M_max = max(M_series.max(), 1e-9)
     
-    # 5. Base Parameters
-    H_max, M_max = float(H_clean.max()), float(M_clean.max())
+    H_val = float(min(H_series.iloc[-1] / H_max, 1.0))
+    M_val = float(min(M_series.iloc[-1] / M_max, 1.0))
+
+    # 5. Redundancy and Info Filter
+    redundancy_series = 1 + 0.1 * np.log1p(
+        df["close"].rolling(5).var() / df["close"].rolling(20).var()
+    )
+    redundancy_val = float(redundancy_series.dropna().iloc[-1]) if redundancy_series.dropna().size > 0 else 1.0
+    
+    info_filter_val = 1.0 if float(H_series.iloc[-1]) > float(H_series.mean()) else 0.0
+    
+    # 6. Volatility Components
+    sigma_last = float(sigma_fig.iloc[-1])
+    sigma_bar = float((sigma_fig ** 2).mean())
+    
+    # 7. Adaptive Base Parameters
     alpha0, delta0 = 0.5, 0.3
     if alpha0 * H_max + delta0 * M_max >= 1:
         fac = 0.95 / (alpha0 * H_max + delta0 * M_max)
         alpha0 *= fac
         delta0 *= fac
     
-    base_params = {
+    params = {
         'alpha': alpha0, 
         'delta': delta0, 
         'gamma': 0.2, 
@@ -152,22 +135,22 @@ def predict_next_range(
         'eta': 1e-3
     }
 
-    # 6. Run Simulation
-    paths = simulate_mc(
-        S0=S0,
-        mu=float(returns.mean()),
-        sigma_fig=sigma_fig,
-        H=H_series,
-        M=M_series,
-        bar_sigma2=bar_sigma2,
-        nu=nu,
-        base_params=base_params,
-        n_sims=n_sims,
-        n_days=1
+    # 8. Run Vectorised Simulation
+    S_t1 = simulate_mc_one_step(
+        S0=S0, 
+        mu=mu_arch, 
+        sigma_last=sigma_last, 
+        sigma_bar=sigma_bar, 
+        H_val=H_val, 
+        M_val=M_val, 
+        redundancy_val=redundancy_val, 
+        info_filter_val=info_filter_val, 
+        params=params, 
+        nu=nu, 
+        n_sims=n_sims
     )
     
-    # 7. Extract 95% prediction range
-    S_t1 = paths[:, 1]
+    # 9. Extract 95% prediction range
     lower = float(np.percentile(S_t1, 2.5))
     upper = float(np.percentile(S_t1, 97.5))
     
