@@ -180,7 +180,7 @@ export default function Chart({
                 zeroline: false,
                 tickfont: { color: '#4F5B6F', size: 9, weight: 'bold' },
                 side: 'right',
-                format: ',.0f'
+                tickformat: ',.0f'
               },
               font: { family: 'Inter, sans-serif' },
               hovermode: 'x unified',
