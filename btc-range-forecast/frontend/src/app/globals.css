@@ -1,26 +1,58 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --background: #0B0F14;
+  --foreground: #ffffff;
+  --card: #0F1720;
+  --card-foreground: #ffffff;
+  --border: #1C2530;
+  --primary: #22c55e;
+  --secondary: #ef4444;
+  --muted: #8F9BB3;
 }
 
 body {
-  background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--background);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  overflow: hidden;
+}
+
+@layer components {
+  .card {
+    @apply bg-[#0F1720] border border-[#1C2530] rounded-xl p-4 shadow-sm backdrop-blur-sm;
+  }
+  .metric-label {
+    @apply text-[9px] uppercase tracking-[0.1em] font-black text-gray-500 mb-0.5;
+  }
+  .metric-value {
+    @apply text-xl font-bold tracking-tighter text-white tabular-nums;
+  }
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #2a3441;
+  border-radius: 6px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #3b4a5a;
+}
+
+/* For Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #2a3441 transparent;
 }
