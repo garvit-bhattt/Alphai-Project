@@ -1,5 +1,7 @@
 import pandas as pd
 import requests
+import time
+import random
 
 
 BINANCE_ENDPOINTS = [
@@ -10,7 +12,11 @@ BINANCE_ENDPOINTS = [
 ]
 
 HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+    "Accept": "application/json",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Cache-Control": "no-cache",
+    "Pragma": "no-cache",
 }
 
 def _make_request(path: str, params: dict, timeout: int = 10):
@@ -23,7 +29,10 @@ def _make_request(path: str, params: dict, timeout: int = 10):
             resp = requests.get(url, params=params, headers=HEADERS, timeout=timeout)
             
             if resp.status_code == 418:
-                print(f"Banned (418) on {base_url}, trying next endpoint...")
+                err_msg = f"418 Client Error on {base_url}"
+                print(f"{err_msg}, trying next endpoint...")
+                last_exception = requests.exceptions.HTTPError(err_msg, response=resp)
+                time.sleep(random.uniform(0.5, 1.5)) # Small backoff before trying next mirror
                 continue
                 
             resp.raise_for_status()
@@ -32,6 +41,7 @@ def _make_request(path: str, params: dict, timeout: int = 10):
         except requests.exceptions.RequestException as e:
             print(f"Network error on {base_url}: {e}")
             last_exception = e
+            time.sleep(random.uniform(0.1, 0.5))
             continue
         except Exception as e:
             print(f"Unexpected error on {base_url}: {e}")
