@@ -93,6 +93,10 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="BTC Range Forecast API", lifespan=lifespan)
 
+@app.get("/")
+def root():
+    return {"status": "ok", "service": "BTC Range Forecast API"}
+
 # ── 1. CORS Configuration ───────────────────────────────────────
 app.add_middleware(
     CORSMiddleware,

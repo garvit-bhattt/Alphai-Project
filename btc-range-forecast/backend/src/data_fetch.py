@@ -2,8 +2,46 @@ import pandas as pd
 import requests
 
 
-BINANCE_KLINES_URL = "https://api1.binance.com/api/v3/klines"
-BINANCE_TICKER_URL = "https://api1.binance.com/api/v3/ticker/price"
+BINANCE_ENDPOINTS = [
+    "https://api.binance.com",
+    "https://api1.binance.com",
+    "https://api2.binance.com",
+    "https://api3.binance.com"
+]
+
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+}
+
+def _make_request(path: str, params: dict, timeout: int = 10):
+    """Try multiple Binance endpoints and handle retries with rotation."""
+    last_exception = None
+    for base_url in BINANCE_ENDPOINTS:
+        url = f"{base_url}{path}"
+        try:
+            # Add headers to avoid 418/403 blocks
+            resp = requests.get(url, params=params, headers=HEADERS, timeout=timeout)
+            
+            if resp.status_code == 418:
+                print(f"Banned (418) on {base_url}, trying next endpoint...")
+                continue
+                
+            resp.raise_for_status()
+            return resp.json()
+            
+        except requests.exceptions.RequestException as e:
+            print(f"Network error on {base_url}: {e}")
+            last_exception = e
+            continue
+        except Exception as e:
+            print(f"Unexpected error on {base_url}: {e}")
+            last_exception = e
+            continue
+    
+    # If we get here, all endpoints failed
+    error_msg = f"Failed to fetch {path} from all Binance endpoints. Last error: {last_exception}"
+    print(error_msg)
+    raise last_exception or Exception(error_msg)
 
 # Binance kline response column indices
 _OPEN_TIME = 0
@@ -36,9 +74,7 @@ def fetch_btc_data(
 
     # ── 1. Fetch ────────────────────────────────────────────────────
     params = {"symbol": symbol, "interval": interval, "limit": limit}
-    resp = requests.get(BINANCE_KLINES_URL, params=params, timeout=15)
-    resp.raise_for_status()
-    raw = resp.json()
+    raw = _make_request("/api/v3/klines", params=params, timeout=15)
 
     # ── 2. Parse ────────────────────────────────────────────────────
     rows = [
@@ -113,9 +149,8 @@ def _validate(df: pd.DataFrame, expected_rows: int, interval: str) -> None:
 def fetch_current_price(symbol: str = "BTCUSDT") -> float:
     """Fetch the absolute latest price for a symbol using the lightweight ticker endpoint."""
     try:
-        resp = requests.get(BINANCE_TICKER_URL, params={"symbol": symbol}, timeout=5)
-        resp.raise_for_status()
-        return float(resp.json()["price"])
+        data = _make_request("/api/v3/ticker/price", params={"symbol": symbol}, timeout=5)
+        return float(data["price"])
     except Exception as e:
         # Re-raise with info but allow caller to handle fallback
         print(f"Error fetching price from {BINANCE_TICKER_URL}: {e}")
