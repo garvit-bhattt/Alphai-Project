@@ -133,8 +133,12 @@ def predict():
         
         latest_entry = history[0]
         
-        # Get live price to keep prediction payload fresh for the UI
-        live_price = fetch_current_price()
+        # Get live price - Wrap in try/except to prevent 418 Client Error from crashing the dashboard
+        try:
+            live_price = fetch_current_price()
+        except Exception as e:
+            logger.warning(f"Live price fetch failed on backend: {e}. Using fallback from DB.")
+            live_price = latest_entry.get("current_price", 0)
         
         return {
             "current_price": live_price,

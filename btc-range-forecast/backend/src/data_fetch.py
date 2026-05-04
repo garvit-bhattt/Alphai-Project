@@ -2,8 +2,8 @@ import pandas as pd
 import requests
 
 
-BINANCE_KLINES_URL = "https://api.binance.com/api/v3/klines"
-BINANCE_TICKER_URL = "https://api.binance.com/api/v3/ticker/price"
+BINANCE_KLINES_URL = "https://api1.binance.com/api/v3/klines"
+BINANCE_TICKER_URL = "https://api1.binance.com/api/v3/ticker/price"
 
 # Binance kline response column indices
 _OPEN_TIME = 0
@@ -112,6 +112,11 @@ def _validate(df: pd.DataFrame, expected_rows: int, interval: str) -> None:
 
 def fetch_current_price(symbol: str = "BTCUSDT") -> float:
     """Fetch the absolute latest price for a symbol using the lightweight ticker endpoint."""
-    resp = requests.get(BINANCE_TICKER_URL, params={"symbol": symbol}, timeout=5)
-    resp.raise_for_status()
-    return float(resp.json()["price"])
+    try:
+        resp = requests.get(BINANCE_TICKER_URL, params={"symbol": symbol}, timeout=5)
+        resp.raise_for_status()
+        return float(resp.json()["price"])
+    except Exception as e:
+        # Re-raise with info but allow caller to handle fallback
+        print(f"Error fetching price from {BINANCE_TICKER_URL}: {e}")
+        raise e

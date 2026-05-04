@@ -7,6 +7,8 @@ import Chart from "@/components/Chart";
 import ForecastPanel from "@/components/ForecastPanel";
 import PredictionHistory from "@/components/PredictionHistory";
 
+import { useBinancePrice } from '@/lib/useBinancePrice';
+
 interface DashboardContentProps {
   initialPrediction: PredictionResponse;
   initialMetrics: MetricsResponse;
@@ -34,19 +36,19 @@ export default function DashboardContent({
   const abortControllerRef = useRef<AbortController | null>(null);
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
 
+  // Live price via WebSocket
+  const livePrice = useBinancePrice('btcusdt');
+
   useEffect(() => {
     setLastUpdated(new Date().toLocaleTimeString("en-US", { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: "UTC" }));
   }, []);
 
-  // 1. FAST REFRESH: Live Price (10s)
-  const fetchLivePrice = useCallback(async () => {
-    try {
-      const data = await getPrice();
-      setPrediction(prev => ({ ...prev, current_price: data.price }));
-    } catch (err) {
-      console.error("Live price fetch failed:", err);
+  // Update prediction state when livePrice updates from WebSocket
+  useEffect(() => {
+    if (livePrice !== null) {
+      setPrediction(prev => ({ ...prev, current_price: livePrice }));
     }
-  }, []);
+  }, [livePrice]);
 
   // 2. MEDIUM REFRESH: Prediction + Metrics + Chart (60s)
   const fetchAllData = useCallback(async () => {
@@ -70,16 +72,14 @@ export default function DashboardContent({
     }
   }, [timeframe]);
 
-  // Set up decoupled intervals
+  // Set up decoupled intervals (removed priceInterval since we use WebSocket)
   useEffect(() => {
-    const priceInterval = setInterval(fetchLivePrice, 10000); // 10s
     const dataInterval = setInterval(fetchAllData, 60000); // 60s
     
     return () => {
-      clearInterval(priceInterval);
       clearInterval(dataInterval);
     };
-  }, [fetchLivePrice, fetchAllData]);
+  }, [fetchAllData]);
 
   const updateHistory = useCallback(async (tf: string) => {
     if (cache[tf]) {
