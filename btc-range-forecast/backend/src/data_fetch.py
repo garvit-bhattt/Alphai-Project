@@ -19,37 +19,96 @@ HEADERS = {
     "Pragma": "no-cache",
 }
 
+def _fetch_from_bybit_klines(symbol: str, interval: str, limit: int):
+    """Fallback fetcher using Bybit v5 API."""
+    print(f"Attempting fallback fetch from Bybit for {symbol}...")
+    bybit_interval = "60" if interval == "1h" else interval.replace("h", "60").replace("d", "D").replace("m", "")
+    if interval == "1d": bybit_interval = "D"
+    
+    url = "https://api.bybit.com/v5/market/kline"
+    params = {
+        "category": "spot",
+        "symbol": symbol.upper(),
+        "interval": bybit_interval,
+        "limit": limit
+    }
+    try:
+        resp = requests.get(url, params=params, headers=HEADERS, timeout=10)
+        resp.raise_for_status()
+        data = resp.json()
+        
+        if data.get("retCode") != 0:
+            raise Exception(f"Bybit API error: {data.get('retMsg')}")
+            
+        # Bybit returns [startTime, open, high, low, close, volume, turnover]
+        # Map to Binance format: [openTime, open, high, low, close, ...]
+        raw_list = data["result"]["list"]
+        raw_list.reverse() # Oldest first
+        
+        return [
+            [int(r[0]), r[1], r[2], r[3], r[4], "0", "0", "0", "0", "0", "0"]
+            for r in raw_list
+        ]
+    except Exception as e:
+        print(f"Bybit fallback failed: {e}")
+        raise e
+
+def _fetch_from_bybit_ticker(symbol: str):
+    """Fallback ticker fetcher using Bybit v5 API."""
+    url = "https://api.bybit.com/v5/market/tickers"
+    params = {"category": "spot", "symbol": symbol.upper()}
+    try:
+        resp = requests.get(url, params=params, headers=HEADERS, timeout=5)
+        resp.raise_for_status()
+        data = resp.json()
+        return {"price": data["result"]["list"][0]["lastPrice"]}
+    except Exception as e:
+        print(f"Bybit ticker fallback failed: {e}")
+        raise e
+
 def _make_request(path: str, params: dict, timeout: int = 10):
-    """Try multiple Binance endpoints and handle retries with rotation."""
+    """Try multiple Binance endpoints and handle retries with rotation and Bybit fallback."""
     last_exception = None
-    for base_url in BINANCE_ENDPOINTS:
+    
+    mirrors = [
+        "https://api.binance.com",
+        "https://api1.binance.com",
+        "https://api2.binance.com",
+        "https://api3.binance.com",
+        "https://api-g1.binance.com",
+        "https://api-g2.binance.com",
+        "https://api-g3.binance.com"
+    ]
+    
+    for base_url in mirrors:
         url = f"{base_url}{path}"
         try:
-            # Add headers to avoid 418/403 blocks
             resp = requests.get(url, params=params, headers=HEADERS, timeout=timeout)
             
             if resp.status_code == 418:
-                err_msg = f"418 Client Error on {base_url}"
-                print(f"{err_msg}, trying next endpoint...")
-                last_exception = requests.exceptions.HTTPError(err_msg, response=resp)
-                time.sleep(random.uniform(0.5, 1.5)) # Small backoff before trying next mirror
+                print(f"418 Client Error on {base_url}, trying next mirror...")
+                last_exception = requests.exceptions.HTTPError(f"418 Client Error on {base_url}", response=resp)
+                time.sleep(random.uniform(0.3, 0.8))
                 continue
                 
             resp.raise_for_status()
             return resp.json()
             
-        except requests.exceptions.RequestException as e:
-            print(f"Network error on {base_url}: {e}")
-            last_exception = e
-            time.sleep(random.uniform(0.1, 0.5))
-            continue
         except Exception as e:
-            print(f"Unexpected error on {base_url}: {e}")
+            print(f"Error on {base_url}: {e}")
             last_exception = e
             continue
     
-    # If we get here, all endpoints failed
-    error_msg = f"Failed to fetch {path} from all Binance endpoints. Last error: {last_exception}"
+    # LAST RESORT: BYBIT FALLBACK
+    try:
+        if "klines" in path:
+            return _fetch_from_bybit_klines(params["symbol"], params["interval"], params["limit"])
+        elif "ticker" in path:
+            return _fetch_from_bybit_ticker(params["symbol"])
+    except Exception as e:
+        print(f"Critical: Bybit fallback also failed: {e}")
+    
+    error_msg = f"Failed to fetch {path} from all Binance mirrors AND Bybit fallback. Last error: {last_exception}"
     print(error_msg)
     raise last_exception or Exception(error_msg)
 
