@@ -1,7 +1,8 @@
 'use client';
 
 import dynamic from 'next/dynamic';
-import { useMemo } from 'react';
+import { useMemo, useRef, useState } from 'react';
+import TerminalPanel from './TerminalPanel';
 
 const Plot = dynamic(() => import('react-plotly.js'), { ssr: false });
 
@@ -22,15 +23,43 @@ interface ChartProps {
     upper: number;
     current_price: number;
   };
+  timeframe?: string;
 }
 
 export default function Chart({ 
   symbol = "BTCUSDT", 
   history,
   isLoading = false,
-  prediction
+  prediction,
+  timeframe = "1h"
 }: ChartProps) {
   const lastCandle = history[history.length - 1];
+  
+  const chartContainerRef = useRef<HTMLDivElement>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  const toggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      chartContainerRef.current?.requestFullscreen().catch(err => {
+        console.error(`Error attempting to enable full-screen mode: ${err.message} (${err.name})`);
+      });
+      setIsFullscreen(true);
+    } else {
+      document.exitFullscreen();
+      setIsFullscreen(false);
+    }
+  };
+
+  const [isUserPanning, setIsUserPanning] = useState(false);
+
+  const handleRelayout = (event: any) => {
+    if (event['xaxis.range[0]'] || event['xaxis.range[1]']) {
+      setIsUserPanning(true);
+    }
+    if (event['xaxis.autorange']) {
+      setIsUserPanning(false);
+    }
+  };
   
   const chartData = useMemo(() => {
     if (history.length === 0) return [];
@@ -128,66 +157,85 @@ export default function Chart({
   }, [history, prediction, lastCandle]);
 
   return (
-    <div className="card h-full min-h-0 flex flex-col overflow-hidden relative border border-[#1C2530] bg-[#0F1720]">
+    <TerminalPanel ref={chartContainerRef} className="h-full min-h-0 flex flex-col overflow-hidden p-0">
       {/* Loading Overlay */}
       {isLoading && (
-        <div className="absolute inset-0 bg-[#0B0F14]/40 backdrop-blur-[1px] z-50 flex items-center justify-center transition-opacity duration-300">
-          <div className="w-8 h-8 border-2 border-[#22c55e] border-t-transparent rounded-full animate-spin" />
+        <div className="absolute inset-0 bg-[#050505]/80 z-50 flex items-center justify-center transition-opacity duration-300">
+          <div className="w-6 h-6 border-2 border-[var(--success)] border-t-transparent rounded-full animate-spin" />
         </div>
       )}
 
-      <div className="flex justify-between items-center mb-0 px-4 pt-2 shrink-0">
-        <div>
-          <h2 className="text-sm font-black tracking-tight text-white/90 uppercase">{symbol} · BINANCE</h2>
+      <div className="flex items-center justify-between px-6 pt-5 pb-2 shrink-0 z-10 w-full bg-[#050505]">
+        <div className="flex flex-col">
+          <div className="flex items-center gap-2">
+            <span className="text-[12px] font-bold text-white tracking-wider uppercase">BTCUSDT - BINANCE</span>
+          </div>
           {lastCandle && (
-            <p className="text-[10px] text-gray-400 mt-0.5 font-bold uppercase tracking-[0.1em] tabular-nums">
-              <span className="text-white/50">O</span> {lastCandle.open.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} 
-              <span className="ml-3 text-white/50">H</span> {lastCandle.high.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} 
-              <span className="ml-3 text-white/50">L</span> {lastCandle.low.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} 
-              <span className="ml-3 text-white/50">C</span> {lastCandle.close.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-            </p>
+          <div className="flex items-center gap-3 text-[10px] font-mono text-[#71717A] mt-1">
+            <span>O <span className="text-[#A1A1AA]">{lastCandle.open.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></span>
+            <span>H <span className="text-[#A1A1AA]">{lastCandle.high.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></span>
+            <span>L <span className="text-[#A1A1AA]">{lastCandle.low.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></span>
+            <span>C <span className="text-[#A1A1AA]">{lastCandle.close.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></span>
+          </div>
           )}
         </div>
-        <div className="flex gap-4">
-          <span className="text-[10px] font-black text-gray-600 uppercase tracking-widest cursor-pointer hover:text-white transition-colors">⚙</span>
-          <span className="text-[10px] font-black text-gray-600 uppercase tracking-widest cursor-pointer hover:text-white transition-colors">⛶</span>
+        <div className="flex items-center gap-6">
+          <div className="flex items-center gap-2 cursor-pointer group">
+            <span className="text-[12px] font-bold text-[#A1A1AA] group-hover:text-white transition-colors">{timeframe.toUpperCase()}</span>
+            <svg width="10" height="6" viewBox="0 0 10 6" fill="none" xmlns="http://www.w3.org/2000/svg" className="text-[#71717A] group-hover:text-white transition-colors">
+              <path d="M1 1L5 5L9 1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </div>
+          <button onClick={toggleFullscreen} className="text-[#71717A] hover:text-white transition-colors focus:outline-none cursor-pointer">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              {isFullscreen ? (
+                <path d="M8 3v3h-3m18-3v3h3m-18 18v-3h-3m18 3v-3h3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              ) : (
+                <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              )}
+            </svg>
+          </button>
         </div>
       </div>
       
-      <div className="flex-1 min-h-0 relative transition-opacity duration-500">
+      <div className="flex-1 min-h-0 relative transition-opacity duration-500 z-0">
         {history.length > 0 ? (
           <Plot
             data={chartData}
+            onRelayout={handleRelayout}
             layout={{
+              uirevision: 'true',
               autosize: true,
-              margin: { l: 0, r: 60, t: 10, b: 30 },
+              margin: { l: 24, r: 60, t: 24, b: 24 },
               showlegend: false,
               plot_bgcolor: 'transparent',
               paper_bgcolor: 'transparent',
               xaxis: {
-                gridcolor: 'rgba(30, 36, 43, 0.2)',
+                gridcolor: '#101010',
                 zeroline: false,
                 rangeslider: { visible: false },
-                tickfont: { color: '#4F5B6F', size: 9, weight: 'bold' },
+                tickfont: { color: '#52525B', size: 10 },
                 type: 'date',
-                range: history.length > 0 ? [
-                  history[Math.max(0, history.length - 60)].time, 
-                  new Date(new Date(lastCandle?.time || '').getTime() + 10800000).toISOString()
-                ] : undefined
+                ...(isUserPanning ? {} : {
+                  range: history.length > 0 ? [
+                    history[Math.max(0, history.length - 60)].time, 
+                    new Date(new Date(lastCandle?.time || '').getTime() + 10800000).toISOString()
+                  ] : undefined
+                })
               },
               yaxis: {
-                gridcolor: 'rgba(30, 36, 43, 0.2)',
+                gridcolor: '#101010',
                 zeroline: false,
-                tickfont: { color: '#4F5B6F', size: 9, weight: 'bold' },
+                tickfont: { color: '#52525B', size: 10 },
                 side: 'right',
                 tickformat: ',.0f'
               },
               font: { family: 'Inter, sans-serif' },
               hovermode: 'x unified',
               hoverlabel: {
-                bgcolor: '#0B0F14',
-                bordercolor: '#1C2530',
-                font: { family: 'Inter, sans-serif', color: '#ffffff', size: 11 },
+                bgcolor: '#080808',
+                bordercolor: '#151515',
+                font: { family: 'Inter, sans-serif', color: '#FFFFFF', size: 11 },
                 align: 'left'
               },
               dragmode: 'pan'
@@ -200,11 +248,11 @@ export default function Chart({
             style={{ width: '100%', height: '100%' }}
           />
         ) : (
-          <div className="flex items-center justify-center h-full bg-[#0B0F14]/20">
-            <div className="w-8 h-8 border-2 border-[#22c55e] border-t-transparent rounded-full animate-spin" />
+          <div className="flex items-center justify-center h-full bg-[#050505]">
+            <div className="w-6 h-6 border-2 border-[var(--success)] border-t-transparent rounded-full animate-spin" />
           </div>
         )}
       </div>
-    </div>
+    </TerminalPanel>
   );
 }
