@@ -1,5 +1,6 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import { PredictionResponse, HistoryItem } from '@/lib/api';
 import TerminalPanel from './TerminalPanel';
 
@@ -16,6 +17,27 @@ interface ForecastPanelProps {
 }
 
 export default function ForecastPanel({ prediction, currentPrice, insights, timeframe = "1h" }: ForecastPanelProps) {
+  const [livePrice, setLivePrice] = useState<number>(currentPrice);
+
+  useEffect(() => {
+    const ws = new WebSocket('wss://stream.binance.com:9443/ws/btcusdt@trade');
+    
+    ws.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.p) {
+          setLivePrice(parseFloat(data.p));
+        }
+      } catch (err) {
+        console.error("WebSocket error:", err);
+      }
+    };
+
+    return () => {
+      ws.close();
+    };
+  }, []);
+
   const formatP = (val: number) => val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   return (
@@ -66,7 +88,7 @@ export default function ForecastPanel({ prediction, currentPrice, insights, time
             <span className="text-[9px] font-bold text-[#71717A] uppercase tracking-wider mb-0.5">Current Market Price</span>
             <div className="flex items-center gap-3">
               <span className="text-[20px] font-bold text-white tabular-nums tracking-tight">
-                ${formatP(currentPrice)}
+                ${formatP(livePrice)}
               </span>
               <div className="flex items-center gap-1 border border-[#151515] px-1.5 py-0.5 rounded-sm bg-white/[0.02]">
                 <div className="w-1.5 h-1.5 rounded-full bg-[#22C55E]" />
